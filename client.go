@@ -21,7 +21,6 @@ var (
 
 type RendezvousPoint interface {
 	Register(ctx context.Context, ns string, ttl int) (time.Duration, error)
-	Unregister(ctx context.Context, ns string) error
 	Discover(ctx context.Context, ns string, limit int, cookie []byte) ([]Registration, []byte, error)
 	DiscoverAsync(ctx context.Context, ns string) (<-chan Registration, error)
 }
@@ -34,7 +33,6 @@ type Registration struct {
 
 type RendezvousClient interface {
 	Register(ctx context.Context, ns string, ttl int) (time.Duration, error)
-	Unregister(ctx context.Context, ns string) error
 	Discover(ctx context.Context, ns string, limit int, cookie []byte) ([]peer.AddrInfo, []byte, error)
 	DiscoverAsync(ctx context.Context, ns string) (<-chan peer.AddrInfo, error)
 }
@@ -142,22 +140,6 @@ func registerRefresh(ctx context.Context, rz RendezvousPoint, ns string, ttl int
 			errcount = 0
 		}
 	}
-}
-
-func (rp *rendezvousPoint) Unregister(ctx context.Context, ns string) error {
-	s, err := rp.host.NewStream(ctx, rp.p, RendezvousProto)
-	if err != nil {
-		return err
-	}
-	defer s.Close()
-
-	w := ggio.NewDelimitedWriter(s)
-	req := newUnregisterMessage(ns, rp.host.ID())
-	return w.WriteMsg(req)
-}
-
-func (rc *rendezvousClient) Unregister(ctx context.Context, ns string) error {
-	return rc.rp.Unregister(ctx, ns)
 }
 
 func (rp *rendezvousPoint) Discover(ctx context.Context, ns string, limit int, cookie []byte) ([]Registration, []byte, error) {

@@ -1,8 +1,6 @@
 package rendezvous
 
 import (
-	"fmt"
-
 	db "github.com/libp2p/go-libp2p-rendezvous/db"
 	pb "github.com/libp2p/go-libp2p-rendezvous/pb"
 
@@ -14,7 +12,7 @@ import (
 )
 
 const (
-	MaxTTL               = 72 * 3600 // 72hr
+	MaxTTL               = 20 // 20sec
 	MaxNamespaceLength   = 256
 	MaxPeerAddressLength = 2048
 	MaxRegistrations     = 1000
@@ -65,12 +63,6 @@ func (rz *RendezvousService) handleStream(s inet.Stream) {
 			if err != nil {
 				log.Debugf("Error writing response: %s", err.Error())
 				return
-			}
-
-		case pb.Message_UNREGISTER:
-			err := rz.handleUnregister(pid, req.GetUnregister())
-			if err != nil {
-				log.Debugf("Error unregistering peer: %s", err.Error())
 			}
 
 		case pb.Message_DISCOVER:
@@ -172,35 +164,6 @@ func (rz *RendezvousService) handleRegister(p peer.ID, m *pb.Message_Register) *
 	}
 
 	return newRegisterResponse(ttl)
-}
-
-func (rz *RendezvousService) handleUnregister(p peer.ID, m *pb.Message_Unregister) error {
-	ns := m.GetNs()
-
-	mpid := m.GetId()
-	if mpid != nil {
-		mp, err := peer.IDFromBytes(mpid)
-		if err != nil {
-			return err
-		}
-
-		if mp != p {
-			return fmt.Errorf("peer id mismatch: %s asked to unregister %s", p.Pretty(), mp.Pretty())
-		}
-	}
-
-	err := rz.DB.Unregister(p, ns)
-	if err != nil {
-		return err
-	}
-
-	log.Infof("unregistered peer %s %s", p, ns)
-
-	for _, rzs := range rz.rzs {
-		rzs.Unregister(p, ns)
-	}
-
-	return nil
 }
 
 func (rz *RendezvousService) handleDiscover(p peer.ID, m *pb.Message_Discover) *pb.Message_DiscoverResponse {
