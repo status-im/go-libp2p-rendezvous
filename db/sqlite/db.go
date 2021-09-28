@@ -11,7 +11,7 @@ import (
 	"os"
 	"time"
 
-	dbi "github.com/libp2p/go-libp2p-rendezvous/db"
+	dbi "github.com/status-im/go-libp2p-rendezvous/db"
 
 	_ "github.com/mattn/go-sqlite3"
 

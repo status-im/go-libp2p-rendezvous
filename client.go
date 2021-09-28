@@ -6,7 +6,7 @@ import (
 	"math/rand"
 	"time"
 
-	pb "github.com/libp2p/go-libp2p-rendezvous/pb"
+	pb "github.com/status-im/go-libp2p-rendezvous/pb"
 
 	ggio "github.com/gogo/protobuf/io"
 

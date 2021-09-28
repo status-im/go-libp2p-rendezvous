@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	db "github.com/libp2p/go-libp2p-rendezvous/db/sqlite"
-	pb "github.com/libp2p/go-libp2p-rendezvous/pb"
+	db "github.com/status-im/go-libp2p-rendezvous/db/sqlite"
+	pb "github.com/status-im/go-libp2p-rendezvous/pb"
 
 	ggio "github.com/gogo/protobuf/io"
 	bhost "github.com/libp2p/go-libp2p-blankhost"

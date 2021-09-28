@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 
-	db "github.com/libp2p/go-libp2p-rendezvous/db"
-	pb "github.com/libp2p/go-libp2p-rendezvous/pb"
+	db "github.com/status-im/go-libp2p-rendezvous/db"
+	pb "github.com/status-im/go-libp2p-rendezvous/pb"
 
 	logging "github.com/ipfs/go-log/v2"
 	"github.com/libp2p/go-libp2p-core/peer"
