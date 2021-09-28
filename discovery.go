@@ -10,8 +10,6 @@ import (
 	"github.com/libp2p/go-libp2p-core/discovery"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
-
-	"github.com/multiformats/go-multiaddr"
 )
 
 type rendezvousDiscovery struct {
@@ -33,7 +31,7 @@ type record struct {
 	expire int64
 }
 
-func NewRendezvousDiscovery(host host.Host, rendezvousPeers []multiaddr.Multiaddr) discovery.Discovery {
+func NewRendezvousDiscovery(host host.Host, rendezvousPeers []peer.ID) discovery.Discovery {
 	rp := NewRendezvousPoint(host, rendezvousPeers)
 	return &rendezvousDiscovery{rp: rp, peerCache: make(map[string]*discoveryCache), rng: rand.New(rand.NewSource(rand.Int63()))}
 }
@@ -50,7 +48,7 @@ func (c *rendezvousDiscovery) Advertise(ctx context.Context, ns string, opts ...
 	var ttlSeconds int
 
 	if ttl == 0 {
-		ttlSeconds = 7200
+		ttlSeconds = MaxTTL
 	} else {
 		ttlSeconds = int(math.Round(ttl.Seconds()))
 	}
