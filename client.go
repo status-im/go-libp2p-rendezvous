@@ -37,7 +37,7 @@ type RendezvousClient interface {
 	DiscoverAsync(ctx context.Context, ns string) (<-chan peer.AddrInfo, error)
 }
 
-func NewRendezvousPoint(host host.Host, p peer.ID) RendezvousPoint {
+func NewRendezvousPoint(host host.Host, p []peer.ID) RendezvousPoint {
 	return &rendezvousPoint{
 		host: host,
 		p:    p,
@@ -46,10 +46,10 @@ func NewRendezvousPoint(host host.Host, p peer.ID) RendezvousPoint {
 
 type rendezvousPoint struct {
 	host host.Host
-	p    peer.ID
+	p    []peer.ID
 }
 
-func NewRendezvousClient(host host.Host, rp peer.ID) RendezvousClient {
+func NewRendezvousClient(host host.Host, rp []peer.ID) RendezvousClient {
 	return NewRendezvousClientWithPoint(NewRendezvousPoint(host, rp))
 }
 
@@ -61,8 +61,12 @@ type rendezvousClient struct {
 	rp RendezvousPoint
 }
 
+func (r *rendezvousPoint) getRandomPeer() peer.ID {
+	return r.p[rand.Intn(len(r.p))] // nolint: gosec
+}
+
 func (rp *rendezvousPoint) Register(ctx context.Context, ns string, ttl int) (time.Duration, error) {
-	s, err := rp.host.NewStream(ctx, rp.p, RendezvousProto)
+	s, err := rp.host.NewStream(ctx, rp.getRandomPeer(), RendezvousProto)
 	if err != nil {
 		return 0, err
 	}
@@ -143,7 +147,7 @@ func registerRefresh(ctx context.Context, rz RendezvousPoint, ns string, ttl int
 }
 
 func (rp *rendezvousPoint) Discover(ctx context.Context, ns string, limit int, cookie []byte) ([]Registration, []byte, error) {
-	s, err := rp.host.NewStream(ctx, rp.p, RendezvousProto)
+	s, err := rp.host.NewStream(ctx, rp.getRandomPeer(), RendezvousProto)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -192,7 +196,7 @@ func discoverQuery(ns string, limit int, cookie []byte, r ggio.Reader, w ggio.Wr
 }
 
 func (rp *rendezvousPoint) DiscoverAsync(ctx context.Context, ns string) (<-chan Registration, error) {
-	s, err := rp.host.NewStream(ctx, rp.p, RendezvousProto)
+	s, err := rp.host.NewStream(ctx, rp.getRandomPeer(), RendezvousProto)
 	if err != nil {
 		return nil, err
 	}
