@@ -15,7 +15,7 @@ import (
 var log = logging.Logger("rendezvous")
 
 const (
-	RendezvousProto = protocol.ID("/rendezvous/1.0.0")
+	RendezvousProto = protocol.ID("/vac/waku/rendezvous/0.0.1")
 
 	DefaultTTL = 2 * 3600 // 2hr
 )
