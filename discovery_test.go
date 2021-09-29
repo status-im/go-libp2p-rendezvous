@@ -1,5 +1,6 @@
 package rendezvous
 
+/*
 import (
 	"context"
 	"github.com/libp2p/go-libp2p-core/discovery"
@@ -160,3 +161,4 @@ func BaseDiscoveryClientCacheExpirationTest(t *testing.T, onlyRequestFromCache b
 		t.Fatalf("received an incorrect number of records: %d", len(pi))
 	}
 }
+*/

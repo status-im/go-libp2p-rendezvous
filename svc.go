@@ -1,7 +1,9 @@
 package rendezvous
 
 import (
-	db "github.com/status-im/go-libp2p-rendezvous/db"
+	"sync"
+	"time"
+
 	pb "github.com/status-im/go-libp2p-rendezvous/pb"
 
 	ggio "github.com/gogo/protobuf/io"
@@ -13,26 +15,96 @@ import (
 
 const (
 	MaxTTL               = 20 // 20sec
+	networkDelay         = 500 * time.Millisecond
+	cleanerPeriod        = 2 * time.Second
 	MaxNamespaceLength   = 256
 	MaxPeerAddressLength = 2048
-	MaxRegistrations     = 1000
-	MaxDiscoverLimit     = 1000
+	MaxDiscoverLimit     = int64(1000)
 )
 
 type RendezvousService struct {
-	DB  db.DB
-	rzs []RendezvousSync
+	h       host.Host
+	storage Storage
+	cleaner *Cleaner
+	rzs     []RendezvousSync
+	wg      sync.WaitGroup
+	quit    chan struct{}
 }
 
 type RendezvousSync interface {
-	Register(p peer.ID, ns string, addrs [][]byte, ttl int, counter uint64)
+	Register(p peer.ID, ns string, addrs [][]byte, ttl int)
 	Unregister(p peer.ID, ns string)
 }
 
-func NewRendezvousService(host host.Host, db db.DB, rzs ...RendezvousSync) *RendezvousService {
-	rz := &RendezvousService{DB: db, rzs: rzs}
-	host.SetStreamHandler(RendezvousProto, rz.handleStream)
+func NewRendezvousService(host host.Host, storage Storage, rzs ...RendezvousSync) *RendezvousService {
+	rz := &RendezvousService{
+		storage: storage,
+		h:       host,
+		cleaner: NewCleaner(),
+		rzs:     rzs,
+	}
+
 	return rz
+}
+
+func (rz *RendezvousService) Start() error {
+	rz.h.SetStreamHandler(RendezvousProto, rz.handleStream)
+
+	if err := rz.startCleaner(); err != nil {
+		return err
+	}
+	// once server is restarted all cleaner info is lost. so we need to rebuild it
+	return rz.storage.IterateAllKeys(func(key RecordsKey, deadline time.Time) error {
+		if !rz.cleaner.Exist(key.String()) {
+			ns := TopicPart(key)
+			log.Debugf("active registration with", "ns", string(ns))
+		}
+		rz.cleaner.Add(deadline, key.String())
+		return nil
+	})
+}
+
+func (rz *RendezvousService) startCleaner() error {
+	rz.quit = make(chan struct{})
+	rz.wg.Add(1)
+	go func() {
+		for {
+			select {
+			case <-time.After(cleanerPeriod):
+				rz.purgeOutdated()
+			case <-rz.quit:
+				rz.wg.Done()
+				return
+			}
+		}
+	}()
+	return nil
+}
+
+// Stop closes listener and waits till all helper goroutines are stopped.
+func (rz *RendezvousService) Stop() {
+	if rz.quit == nil {
+		return
+	}
+	select {
+	case <-rz.quit:
+		return
+	default:
+	}
+	close(rz.quit)
+	rz.wg.Wait()
+}
+
+func (rz *RendezvousService) purgeOutdated() {
+	keys := rz.cleaner.PopSince(time.Now())
+	log.Info("removed records from cleaner", "deadlines", len(rz.cleaner.deadlines), "heap", len(rz.cleaner.heap), "lth", len(keys))
+	for _, key := range keys {
+		topic := TopicPart([]byte(key))
+		log.Debug("Removing record with", "topic", string(topic))
+		if err := rz.storage.RemoveByKey(key); err != nil {
+			log.Error("error removing key from storage", "key", key, "error", err)
+		}
+	}
 }
 
 func (rz *RendezvousService) handleStream(s inet.Stream) {
@@ -57,7 +129,7 @@ func (rz *RendezvousService) handleStream(s inet.Stream) {
 		switch t {
 		case pb.Message_REGISTER:
 			r := rz.handleRegister(pid, req.GetRegister())
-			res.Type = pb.Message_REGISTER_RESPONSE.Enum()
+			res.Type = pb.Message_REGISTER_RESPONSE
 			res.RegisterResponse = r
 			err = w.WriteMsg(&res)
 			if err != nil {
@@ -67,7 +139,7 @@ func (rz *RendezvousService) handleStream(s inet.Stream) {
 
 		case pb.Message_DISCOVER:
 			r := rz.handleDiscover(pid, req.GetDiscover())
-			res.Type = pb.Message_DISCOVER_RESPONSE.Enum()
+			res.Type = pb.Message_DISCOVER_RESPONSE
 			res.DiscoverResponse = r
 			err = w.WriteMsg(&res)
 			if err != nil {
@@ -98,6 +170,7 @@ func (rz *RendezvousService) handleRegister(p peer.ID, m *pb.Message_Register) *
 	}
 
 	mpid := mpi.GetId()
+	var mp peer.ID
 	if mpid != nil {
 		mp, err := peer.IDFromBytes(mpid)
 		if err != nil {
@@ -136,31 +209,24 @@ func (rz *RendezvousService) handleRegister(p peer.ID, m *pb.Message_Register) *
 		ttl = int(mttl)
 	}
 
-	// now check how many registrations we have for this peer -- simple limit to defend
-	// against trivial DoS attacks (eg a peer connects and keeps registering until it
-	// fills our db)
-	rcount, err := rz.DB.CountRegistrations(p)
+	deadline := time.Now().Add(time.Duration(ttl)).Add(networkDelay)
+
+	key, err := rz.storage.Add(ns, mp, maddrs, ttl, deadline)
 	if err != nil {
-		log.Errorf("Error counting registrations: %s", err.Error())
-		return newRegisterResponseError(pb.Message_E_INTERNAL_ERROR, "database error")
+		return newRegisterResponseError(pb.Message_E_INTERNAL_ERROR, err.Error())
 	}
 
-	if rcount > MaxRegistrations {
-		log.Warningf("Too many registrations for %s", p)
-		return newRegisterResponseError(pb.Message_E_NOT_AUTHORIZED, "too many registrations")
+	if !rz.cleaner.Exist(key) {
+		log.Debugf("active registration with", "ns", ns)
 	}
 
-	// ok, seems like we can register
-	counter, err := rz.DB.Register(p, ns, maddrs, ttl)
-	if err != nil {
-		log.Errorf("Error registering: %s", err.Error())
-		return newRegisterResponseError(pb.Message_E_INTERNAL_ERROR, "database error")
-	}
+	log.Debugf("updating record in the cleaner", "deadline", deadline, "ns", ns)
+	rz.cleaner.Add(deadline, key)
 
 	log.Infof("registered peer %s %s (%d)", p, ns, ttl)
 
 	for _, rzs := range rz.rzs {
-		rzs.Register(p, ns, maddrs, ttl, counter)
+		rzs.Register(p, ns, maddrs, ttl)
 	}
 
 	return newRegisterResponse(ttl)
@@ -176,21 +242,16 @@ func (rz *RendezvousService) handleDiscover(p peer.ID, m *pb.Message_Discover) *
 	limit := MaxDiscoverLimit
 	mlimit := m.GetLimit()
 	if mlimit > 0 && mlimit < int64(limit) {
-		limit = int(mlimit)
+		limit = mlimit
 	}
 
-	cookie := m.GetCookie()
-	if cookie != nil && !rz.DB.ValidCookie(ns, cookie) {
-		return newDiscoverResponseError(pb.Message_E_INVALID_COOKIE, "bad cookie")
-	}
-
-	regs, cookie, err := rz.DB.Discover(ns, cookie, limit)
+	records, err := rz.storage.GetRandom(ns, limit)
 	if err != nil {
 		log.Errorf("Error in query: %s", err.Error())
 		return newDiscoverResponseError(pb.Message_E_INTERNAL_ERROR, "database error")
 	}
 
-	log.Infof("discover query: %s %s -> %d", p, ns, len(regs))
+	log.Infof("discover query: %s %s -> %d", p, ns, len(records))
 
-	return newDiscoverResponse(regs, cookie)
+	return newDiscoverResponse(records)
 }

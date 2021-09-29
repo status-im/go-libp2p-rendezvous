@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	db "github.com/status-im/go-libp2p-rendezvous/db"
 	pb "github.com/status-im/go-libp2p-rendezvous/pb"
 
 	logging "github.com/ipfs/go-log/v2"
@@ -32,14 +31,14 @@ func (e RendezvousError) Error() string {
 
 func newRegisterMessage(ns string, pi peer.AddrInfo, ttl int) *pb.Message {
 	msg := new(pb.Message)
-	msg.Type = pb.Message_REGISTER.Enum()
+	msg.Type = pb.Message_REGISTER
 	msg.Register = new(pb.Message_Register)
 	if ns != "" {
-		msg.Register.Ns = &ns
+		msg.Register.Ns = ns
 	}
 	if ttl > 0 {
 		ttl64 := int64(ttl)
-		msg.Register.Ttl = &ttl64
+		msg.Register.Ttl = ttl64
 	}
 	msg.Register.Peer = new(pb.Message_PeerInfo)
 	msg.Register.Peer.Id = []byte(pi.ID)
@@ -52,28 +51,25 @@ func newRegisterMessage(ns string, pi peer.AddrInfo, ttl int) *pb.Message {
 
 func newUnregisterMessage(ns string, pid peer.ID) *pb.Message {
 	msg := new(pb.Message)
-	msg.Type = pb.Message_UNREGISTER.Enum()
+	msg.Type = pb.Message_UNREGISTER
 	msg.Unregister = new(pb.Message_Unregister)
 	if ns != "" {
-		msg.Unregister.Ns = &ns
+		msg.Unregister.Ns = ns
 	}
 	msg.Unregister.Id = []byte(pid)
 	return msg
 }
 
-func newDiscoverMessage(ns string, limit int, cookie []byte) *pb.Message {
+func newDiscoverMessage(ns string, limit int) *pb.Message {
 	msg := new(pb.Message)
-	msg.Type = pb.Message_DISCOVER.Enum()
+	msg.Type = pb.Message_DISCOVER
 	msg.Discover = new(pb.Message_Discover)
 	if ns != "" {
-		msg.Discover.Ns = &ns
+		msg.Discover.Ns = ns
 	}
 	if limit > 0 {
 		limit64 := int64(limit)
-		msg.Discover.Limit = &limit64
-	}
-	if cookie != nil {
-		msg.Discover.Cookie = cookie
+		msg.Discover.Limit = limit64
 	}
 	return msg
 }
@@ -103,44 +99,43 @@ func pbToPeerInfo(p *pb.Message_PeerInfo) (peer.AddrInfo, error) {
 func newRegisterResponse(ttl int) *pb.Message_RegisterResponse {
 	ttl64 := int64(ttl)
 	r := new(pb.Message_RegisterResponse)
-	r.Status = pb.Message_OK.Enum()
-	r.Ttl = &ttl64
+	r.Status = pb.Message_OK
+	r.Ttl = ttl64
 	return r
 }
 
 func newRegisterResponseError(status pb.Message_ResponseStatus, text string) *pb.Message_RegisterResponse {
 	r := new(pb.Message_RegisterResponse)
-	r.Status = status.Enum()
-	r.StatusText = &text
+	r.Status = status
+	r.StatusText = text
 	return r
 }
 
-func newDiscoverResponse(regs []db.RegistrationRecord, cookie []byte) *pb.Message_DiscoverResponse {
+func newDiscoverResponse(regs []RegistrationRecord) *pb.Message_DiscoverResponse {
 	r := new(pb.Message_DiscoverResponse)
-	r.Status = pb.Message_OK.Enum()
+	r.Status = pb.Message_OK
 
 	rregs := make([]*pb.Message_Register, len(regs))
 	for i, reg := range regs {
 		rreg := new(pb.Message_Register)
 		rns := reg.Ns
-		rreg.Ns = &rns
+		rreg.Ns = rns
 		rreg.Peer = new(pb.Message_PeerInfo)
 		rreg.Peer.Id = []byte(reg.Id)
 		rreg.Peer.Addrs = reg.Addrs
 		rttl := int64(reg.Ttl)
-		rreg.Ttl = &rttl
+		rreg.Ttl = rttl
 		rregs[i] = rreg
 	}
 
 	r.Registrations = rregs
-	r.Cookie = cookie
 
 	return r
 }
 
 func newDiscoverResponseError(status pb.Message_ResponseStatus, text string) *pb.Message_DiscoverResponse {
 	r := new(pb.Message_DiscoverResponse)
-	r.Status = status.Enum()
-	r.StatusText = &text
+	r.Status = status
+	r.StatusText = text
 	return r
 }

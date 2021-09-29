@@ -105,19 +105,15 @@ func (c *rendezvousDiscovery) FindPeers(ctx context.Context, ns string, opts ...
 		}
 	}
 
-	cookie := cache.cookie
-
 	// Discover new records if we don't have enough
 	if newCacheSize < limit {
 		// TODO: Should we return error even if we have valid cached results?
 		var regs []Registration
-		var newCookie []byte
-		if regs, newCookie, err = c.rp.Discover(ctx, ns, limit, cookie); err == nil {
+		if regs, err = c.rp.Discover(ctx, ns, limit); err == nil {
 			for _, reg := range regs {
 				rec := &record{peer: reg.Peer, expire: int64(reg.Ttl) + currentTime}
 				cache.recs[rec.peer.ID] = rec
 			}
-			cache.cookie = newCookie
 		}
 	}
 

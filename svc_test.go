@@ -1,5 +1,6 @@
 package rendezvous
 
+/*
 import (
 	"context"
 	"fmt"
@@ -343,3 +344,4 @@ func doTestRequest(ctx context.Context, host host.Host, rp peer.ID, m *pb.Messag
 
 	return res, nil
 }
+*/

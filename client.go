@@ -21,7 +21,7 @@ var (
 
 type RendezvousPoint interface {
 	Register(ctx context.Context, ns string, ttl int) (time.Duration, error)
-	Discover(ctx context.Context, ns string, limit int, cookie []byte) ([]Registration, []byte, error)
+	Discover(ctx context.Context, ns string, limit int) ([]Registration, error)
 	DiscoverAsync(ctx context.Context, ns string) (<-chan Registration, error)
 }
 
@@ -33,7 +33,7 @@ type Registration struct {
 
 type RendezvousClient interface {
 	Register(ctx context.Context, ns string, ttl int) (time.Duration, error)
-	Discover(ctx context.Context, ns string, limit int, cookie []byte) ([]peer.AddrInfo, []byte, error)
+	Discover(ctx context.Context, ns string, limit int) ([]peer.AddrInfo, error)
 	DiscoverAsync(ctx context.Context, ns string) (<-chan peer.AddrInfo, error)
 }
 
@@ -97,7 +97,7 @@ func (rp *rendezvousPoint) Register(ctx context.Context, ns string, ttl int) (ti
 		return 0, RendezvousError{Status: status, Text: res.GetRegisterResponse().GetStatusText()}
 	}
 
-	return time.Duration(*response.Ttl) * time.Second, nil
+	return time.Duration(response.Ttl) * time.Second, nil
 }
 
 func (rc *rendezvousClient) Register(ctx context.Context, ns string, ttl int) (time.Duration, error) {
@@ -146,39 +146,39 @@ func registerRefresh(ctx context.Context, rz RendezvousPoint, ns string, ttl int
 	}
 }
 
-func (rp *rendezvousPoint) Discover(ctx context.Context, ns string, limit int, cookie []byte) ([]Registration, []byte, error) {
+func (rp *rendezvousPoint) Discover(ctx context.Context, ns string, limit int) ([]Registration, error) {
 	s, err := rp.host.NewStream(ctx, rp.getRandomPeer(), RendezvousProto)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	defer s.Reset()
 
 	r := ggio.NewDelimitedReader(s, inet.MessageSizeMax)
 	w := ggio.NewDelimitedWriter(s)
 
-	return discoverQuery(ns, limit, cookie, r, w)
+	return discoverQuery(ns, limit, r, w)
 }
 
-func discoverQuery(ns string, limit int, cookie []byte, r ggio.Reader, w ggio.Writer) ([]Registration, []byte, error) {
-	req := newDiscoverMessage(ns, limit, cookie)
+func discoverQuery(ns string, limit int, r ggio.Reader, w ggio.Writer) ([]Registration, error) {
+	req := newDiscoverMessage(ns, limit)
 	err := w.WriteMsg(req)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	var res pb.Message
 	err = r.ReadMsg(&res)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	if res.GetType() != pb.Message_DISCOVER_RESPONSE {
-		return nil, nil, fmt.Errorf("Unexpected response: %s", res.GetType().String())
+		return nil, fmt.Errorf("Unexpected response: %s", res.GetType().String())
 	}
 
 	status := res.GetDiscoverResponse().GetStatus()
 	if status != pb.Message_OK {
-		return nil, nil, RendezvousError{Status: status, Text: res.GetDiscoverResponse().GetStatusText()}
+		return nil, RendezvousError{Status: status, Text: res.GetDiscoverResponse().GetStatusText()}
 	}
 
 	regs := res.GetDiscoverResponse().GetRegistrations()
@@ -192,7 +192,7 @@ func discoverQuery(ns string, limit int, cookie []byte, r ggio.Reader, w ggio.Wr
 		result = append(result, Registration{Peer: pi, Ns: reg.GetNs(), Ttl: int(reg.GetTtl())})
 	}
 
-	return result, res.GetDiscoverResponse().GetCookie(), nil
+	return result, nil
 }
 
 func (rp *rendezvousPoint) DiscoverAsync(ctx context.Context, ns string) (<-chan Registration, error) {
@@ -216,17 +216,15 @@ func discoverAsync(ctx context.Context, ns string, s inet.Stream, ch chan Regist
 	const batch = 200
 
 	var (
-		cookie []byte
-		regs   []Registration
-		err    error
+		regs []Registration
+		err  error
 	)
 
 	for {
-		regs, cookie, err = discoverQuery(ns, batch, cookie, r, w)
+		regs, err = discoverQuery(ns, batch, r, w)
 		if err != nil {
 			// TODO robust error recovery
-			//      - handle closed streams with backoff + new stream, preserving the cookie
-			//      - handle E_INVALID_COOKIE errors in that case to restart the discovery
+			//      - handle closed streams with backoff + new stream
 			log.Errorf("Error in discovery [%s]: %s", ns, err.Error())
 			return
 		}
@@ -250,10 +248,10 @@ func discoverAsync(ctx context.Context, ns string, s inet.Stream, ch chan Regist
 	}
 }
 
-func (rc *rendezvousClient) Discover(ctx context.Context, ns string, limit int, cookie []byte) ([]peer.AddrInfo, []byte, error) {
-	regs, cookie, err := rc.rp.Discover(ctx, ns, limit, cookie)
+func (rc *rendezvousClient) Discover(ctx context.Context, ns string, limit int) ([]peer.AddrInfo, error) {
+	regs, err := rc.rp.Discover(ctx, ns, limit)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	pinfos := make([]peer.AddrInfo, len(regs))
@@ -261,7 +259,7 @@ func (rc *rendezvousClient) Discover(ctx context.Context, ns string, limit int, 
 		pinfos[i] = reg.Peer
 	}
 
-	return pinfos, cookie, nil
+	return pinfos, nil
 }
 
 func (rc *rendezvousClient) DiscoverAsync(ctx context.Context, ns string) (<-chan peer.AddrInfo, error) {

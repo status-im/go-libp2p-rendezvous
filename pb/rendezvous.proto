@@ -16,7 +16,6 @@ message Message {
     E_INVALID_NAMESPACE = 100;
     E_INVALID_PEER_INFO = 101;
     E_INVALID_TTL       = 102;
-    E_INVALID_COOKIE    = 103;
     E_NOT_AUTHORIZED    = 200;
     E_INTERNAL_ERROR    = 300;
     E_UNAVAILABLE       = 400;
@@ -47,12 +46,10 @@ message Message {
   message Discover {
     string ns = 1;
     int64 limit = 2;
-    bytes cookie = 3;
   }
 
   message DiscoverResponse {
     repeated Register registrations = 1;
-    bytes cookie = 2;
     ResponseStatus status = 3;
     string statusText = 4;
   }
