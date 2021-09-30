@@ -31,8 +31,8 @@ type record struct {
 	expire int64
 }
 
-func NewRendezvousDiscovery(host host.Host, rendezvousPeers []peer.ID) discovery.Discovery {
-	rp := NewRendezvousPoint(host, rendezvousPeers)
+func NewRendezvousDiscovery(host host.Host) discovery.Discovery {
+	rp := NewRendezvousPoint(host)
 	return &rendezvousDiscovery{rp: rp, peerCache: make(map[string]*discoveryCache), rng: rand.New(rand.NewSource(rand.Int63()))}
 }
 

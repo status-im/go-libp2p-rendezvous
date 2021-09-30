@@ -48,7 +48,7 @@ func NewRendezvousService(host host.Host, storage Storage, rzs ...RendezvousSync
 }
 
 func (rz *RendezvousService) Start() error {
-	rz.h.SetStreamHandler(RendezvousProto, rz.handleStream)
+	rz.h.SetStreamHandler(RendezvousID_v001, rz.handleStream)
 
 	if err := rz.startCleaner(); err != nil {
 		return err
