@@ -2,6 +2,7 @@ package rendezvous
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"time"
@@ -71,6 +72,11 @@ func (r *rendezvousPoint) getRandomPeer() (peer.ID, error) {
 			peerIDs = append(peerIDs, peer)
 		}
 	}
+
+	if len(peerIDs) == 0 {
+		return "", errors.New("no peers available")
+	}
+
 	return peerIDs[rand.Intn(len(peerIDs))], nil // nolint: gosec
 }
 
