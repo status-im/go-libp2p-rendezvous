@@ -68,7 +68,7 @@ func (c *rendezvousDiscovery) FindPeers(ctx context.Context, ns string, opts ...
 		return nil, err
 	}
 
-	const maxLimit = 1000
+	const maxLimit = 50
 	limit := options.Limit
 	if limit == 0 || limit > maxLimit {
 		limit = maxLimit

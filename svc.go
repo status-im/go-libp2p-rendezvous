@@ -172,7 +172,8 @@ func (rz *RendezvousService) handleRegister(p peer.ID, m *pb.Message_Register) *
 	mpid := mpi.GetId()
 	var mp peer.ID
 	if mpid != nil {
-		mp, err := peer.IDFromBytes(mpid)
+		var err error
+		mp, err = peer.IDFromBytes(mpid)
 		if err != nil {
 			return newRegisterResponseError(pb.Message_E_INVALID_PEER_INFO, "bad peer id")
 		}
