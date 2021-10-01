@@ -3,13 +3,18 @@ package rendezvous
 import (
 	"errors"
 	"fmt"
+	"time"
+
+	"github.com/golang/protobuf/proto"
+	libp2pCrypto "github.com/libp2p/go-libp2p-core/crypto"
+	"github.com/libp2p/go-libp2p-core/record"
+	record_pb "github.com/libp2p/go-libp2p-core/record/pb"
 
 	pb "github.com/status-im/go-libp2p-rendezvous/pb"
 
 	logging "github.com/ipfs/go-log/v2"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/protocol"
-	ma "github.com/multiformats/go-multiaddr"
 )
 
 var log = logging.Logger("rendezvous")
@@ -28,7 +33,7 @@ func (e RendezvousError) Error() string {
 	return fmt.Sprintf("Rendezvous error: %s (%s)", e.Text, pb.Message_ResponseStatus(e.Status).String())
 }
 
-func newRegisterMessage(ns string, pi peer.AddrInfo, ttl int) *pb.Message {
+func newRegisterMessage(privKey libp2pCrypto.PrivKey, ns string, pi peer.AddrInfo, ttl int) (*pb.Message, error) {
 	msg := new(pb.Message)
 	msg.Type = pb.Message_REGISTER
 	msg.Register = new(pb.Message_Register)
@@ -39,24 +44,26 @@ func newRegisterMessage(ns string, pi peer.AddrInfo, ttl int) *pb.Message {
 		ttl64 := int64(ttl)
 		msg.Register.Ttl = ttl64
 	}
-	msg.Register.Peer = new(pb.Message_PeerInfo)
-	msg.Register.Peer.Id = []byte(pi.ID)
-	msg.Register.Peer.Addrs = make([][]byte, len(pi.Addrs))
-	for i, addr := range pi.Addrs {
-		msg.Register.Peer.Addrs[i] = addr.Bytes()
-	}
-	return msg
-}
 
-func newUnregisterMessage(ns string, pid peer.ID) *pb.Message {
-	msg := new(pb.Message)
-	msg.Type = pb.Message_UNREGISTER
-	msg.Unregister = new(pb.Message_Unregister)
-	if ns != "" {
-		msg.Unregister.Ns = ns
+	peerInfo := &peer.PeerRecord{
+		PeerID: pi.ID,
+		Addrs:  pi.Addrs,
+		Seq:    uint64(time.Now().Unix()),
 	}
-	msg.Unregister.Id = []byte(pid)
-	return msg
+
+	envelope, err := record.Seal(peerInfo, privKey)
+	if err != nil {
+		return nil, err
+	}
+
+	envPayload, err := envelope.Marshal()
+	if err != nil {
+		return nil, err
+	}
+
+	msg.Register.Peer = envPayload
+
+	return msg, nil
 }
 
 func newDiscoverMessage(ns string, limit int) *pb.Message {
@@ -73,26 +80,27 @@ func newDiscoverMessage(ns string, limit int) *pb.Message {
 	return msg
 }
 
-func pbToPeerInfo(p *pb.Message_PeerInfo) (peer.AddrInfo, error) {
-	if p == nil {
-		return peer.AddrInfo{}, errors.New("missing peer info")
+func pbToPeerRecord(pbEnvelope *record_pb.Envelope) (peer.AddrInfo, error) {
+	if pbEnvelope == nil {
+		return peer.AddrInfo{}, errors.New("missing envelope information")
 	}
 
-	id, err := peer.IDFromBytes(p.Id)
+	envelopeBytes, err := proto.Marshal(pbEnvelope)
 	if err != nil {
 		return peer.AddrInfo{}, err
 	}
-	addrs := make([]ma.Multiaddr, 0, len(p.Addrs))
-	for _, bs := range p.Addrs {
-		addr, err := ma.NewMultiaddrBytes(bs)
-		if err != nil {
-			log.Errorf("Error parsing multiaddr: %s", err.Error())
-			continue
-		}
-		addrs = append(addrs, addr)
+
+	_, rec, err := record.ConsumeEnvelope(envelopeBytes, peer.PeerRecordEnvelopeDomain)
+	if err != nil {
+		return peer.AddrInfo{}, err
 	}
 
-	return peer.AddrInfo{ID: id, Addrs: addrs}, nil
+	peerRec, ok := rec.(*peer.PeerRecord)
+	if !ok {
+		return peer.AddrInfo{}, errors.New("invalid peer record")
+	}
+
+	return peer.AddrInfo{ID: peerRec.PeerID, Addrs: peerRec.Addrs}, nil
 }
 
 func newRegisterResponse(ttl int) *pb.Message_RegisterResponse {
@@ -110,18 +118,22 @@ func newRegisterResponseError(status pb.Message_ResponseStatus, text string) *pb
 	return r
 }
 
-func newDiscoverResponse(regs []RegistrationRecord) *pb.Message_DiscoverResponse {
+func newDiscoverResponse(regs []RegistrationRecord) (*pb.Message_DiscoverResponse, error) {
 	r := new(pb.Message_DiscoverResponse)
 	r.Status = pb.Message_OK
 
 	rregs := make([]*pb.Message_Register, len(regs))
 	for i, reg := range regs {
+
+		var env = &record_pb.Envelope{}
+		if err := env.Unmarshal(reg.PeerEnvelope); err != nil {
+			return nil, err
+		}
+
 		rreg := new(pb.Message_Register)
 		rns := reg.Ns
 		rreg.Ns = rns
-		rreg.Peer = new(pb.Message_PeerInfo)
-		rreg.Peer.Id = []byte(reg.Id)
-		rreg.Peer.Addrs = reg.Addrs
+		rreg.Peer = env
 		rttl := int64(reg.Ttl)
 		rreg.Ttl = rttl
 		rregs[i] = rreg
@@ -129,7 +141,7 @@ func newDiscoverResponse(regs []RegistrationRecord) *pb.Message_DiscoverResponse
 
 	r.Registrations = rregs
 
-	return r
+	return r, nil
 }
 
 func newDiscoverResponseError(status pb.Message_ResponseStatus, text string) *pb.Message_DiscoverResponse {

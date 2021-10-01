@@ -18,11 +18,10 @@ const (
 )
 
 type RegistrationRecord struct {
-	Id       peer.ID
-	Addrs    [][]byte
-	Ns       string
-	Ttl      int
-	Deadline time.Time
+	PeerEnvelope []byte
+	Ns           string
+	Ttl          int
+	Deadline     time.Time
 }
 
 // TopicPart looks for TopicBodyDelimiter and returns topic prefix from the same key.
@@ -67,14 +66,13 @@ type Storage struct {
 }
 
 // Add stores record using specified topic.
-func (s Storage) Add(ns string, id peer.ID, addrs [][]byte, ttl int, deadline time.Time) (string, error) {
+func (s Storage) Add(ns string, id peer.ID, envelope []byte, ttl int, deadline time.Time) (string, error) {
 	key := NewRecordsKey(ns, id)
 	stored := RegistrationRecord{
-		Id:       id,
-		Addrs:    addrs,
-		Ttl:      ttl,
-		Ns:       ns,
-		Deadline: deadline,
+		PeerEnvelope: envelope,
+		Ttl:          ttl,
+		Ns:           ns,
+		Deadline:     deadline,
 	}
 
 	var data bytes.Buffer

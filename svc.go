@@ -254,5 +254,11 @@ func (rz *RendezvousService) handleDiscover(p peer.ID, m *pb.Message_Discover) *
 
 	log.Infof("discover query: %s %s -> %d", p, ns, len(records))
 
-	return newDiscoverResponse(records)
+	response, err := newDiscoverResponse(records)
+	if err != nil {
+		log.Errorf("Error in response: %s", err.Error())
+		return newDiscoverResponseError(pb.Message_E_INTERNAL_ERROR, "error building response")
+	}
+
+	return response
 }

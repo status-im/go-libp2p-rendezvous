@@ -95,7 +95,12 @@ func (rp *rendezvousPoint) Register(ctx context.Context, ns string, ttl int) (ti
 	r := ggio.NewDelimitedReader(s, inet.MessageSizeMax)
 	w := ggio.NewDelimitedWriter(s)
 
-	req := newRegisterMessage(ns, peer.AddrInfo{ID: rp.host.ID(), Addrs: rp.host.Addrs()}, ttl)
+	privKey := rp.host.Peerstore().PrivKey(rp.host.ID())
+	req, err := newRegisterMessage(privKey, ns, peer.AddrInfo{ID: rp.host.ID(), Addrs: rp.host.Addrs()}, ttl)
+	if err != nil {
+		return 0, err
+	}
+
 	err = w.WriteMsg(req)
 	if err != nil {
 		return 0, err
@@ -118,6 +123,7 @@ func (rp *rendezvousPoint) Register(ctx context.Context, ns string, ttl int) (ti
 	}
 
 	return time.Duration(response.Ttl) * time.Second, nil
+	return time.Duration(1) * time.Second, nil
 }
 
 func (rc *rendezvousClient) Register(ctx context.Context, ns string, ttl int) (time.Duration, error) {
@@ -209,7 +215,7 @@ func discoverQuery(ns string, limit int, r ggio.Reader, w ggio.Writer) ([]Regist
 	regs := res.GetDiscoverResponse().GetRegistrations()
 	result := make([]Registration, 0, len(regs))
 	for _, reg := range regs {
-		pi, err := pbToPeerInfo(reg.GetPeer())
+		pi, err := pbToPeerRecord(reg.GetPeer())
 		if err != nil {
 			log.Errorf("Invalid peer info: %s", err.Error())
 			continue
