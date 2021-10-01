@@ -9,7 +9,7 @@ import (
 	io "io"
 	math "math"
 	math_bits "math/bits"
-	pb "record/pb"
+	pb "github.com/libp2p/go-libp2p-core/record/pb"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.

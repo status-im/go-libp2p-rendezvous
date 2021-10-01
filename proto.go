@@ -61,7 +61,12 @@ func newRegisterMessage(privKey libp2pCrypto.PrivKey, ns string, pi peer.AddrInf
 		return nil, err
 	}
 
-	msg.Register.Peer = envPayload
+	var peerEnvelop *record_pb.Envelope
+	if err = proto.Unmarshal(envPayload, peerEnvelop); err != nil {
+		return nil, err
+	}
+
+	msg.Register.Peer = peerEnvelop
 
 	return msg, nil
 }
@@ -78,6 +83,10 @@ func newDiscoverMessage(ns string, limit int) *pb.Message {
 		msg.Discover.Limit = limit64
 	}
 	return msg
+}
+
+func marshalEnvelope(pbEnvelope *record_pb.Envelope) ([]byte, error) {
+	return proto.Marshal(pbEnvelope)
 }
 
 func pbToPeerRecord(pbEnvelope *record_pb.Envelope) (peer.AddrInfo, error) {

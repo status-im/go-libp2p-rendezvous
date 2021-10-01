@@ -21,9 +21,8 @@ type rendezvousDiscovery struct {
 }
 
 type discoveryCache struct {
-	recs   map[peer.ID]*peerRecord
-	cookie []byte
-	mux    sync.Mutex
+	recs map[peer.ID]*peerRecord
+	mux  sync.Mutex
 }
 
 type peerRecord struct {

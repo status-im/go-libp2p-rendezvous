@@ -26,22 +26,15 @@ type RendezvousService struct {
 	h       host.Host
 	storage Storage
 	cleaner *Cleaner
-	rzs     []RendezvousSync
 	wg      sync.WaitGroup
 	quit    chan struct{}
 }
 
-type RendezvousSync interface {
-	Register(p peer.ID, ns string, addrs [][]byte, ttl int)
-	Unregister(p peer.ID, ns string)
-}
-
-func NewRendezvousService(host host.Host, storage Storage, rzs ...RendezvousSync) *RendezvousService {
+func NewRendezvousService(host host.Host, storage Storage) *RendezvousService {
 	rz := &RendezvousService{
 		storage: storage,
 		h:       host,
 		cleaner: NewCleaner(),
-		rzs:     rzs,
 	}
 
 	return rz
@@ -169,28 +162,22 @@ func (rz *RendezvousService) handleRegister(p peer.ID, m *pb.Message_Register) *
 		return newRegisterResponseError(pb.Message_E_INVALID_PEER_INFO, "missing peer info")
 	}
 
-	mpid := mpi.GetId()
-	var mp peer.ID
-	if mpid != nil {
-		var err error
-		mp, err = peer.IDFromBytes(mpid)
-		if err != nil {
-			return newRegisterResponseError(pb.Message_E_INVALID_PEER_INFO, "bad peer id")
-		}
-
-		if mp != p {
-			return newRegisterResponseError(pb.Message_E_INVALID_PEER_INFO, "peer id mismatch")
-		}
+	peerRecord, err := pbToPeerRecord(mpi)
+	if err != nil {
+		return newRegisterResponseError(pb.Message_E_INVALID_PEER_INFO, "invalid peer record")
 	}
 
-	maddrs := mpi.GetAddrs()
-	if len(maddrs) == 0 {
+	if peerRecord.ID != p {
+		return newRegisterResponseError(pb.Message_E_INVALID_PEER_INFO, "peer id mismatch")
+	}
+
+	if len(peerRecord.Addrs) == 0 {
 		return newRegisterResponseError(pb.Message_E_INVALID_PEER_INFO, "missing peer addresses")
 	}
 
 	mlen := 0
-	for _, maddr := range maddrs {
-		mlen += len(maddr)
+	for _, maddr := range peerRecord.Addrs {
+		mlen += len(maddr.Bytes())
 	}
 	if mlen > MaxPeerAddressLength {
 		return newRegisterResponseError(pb.Message_E_INVALID_PEER_INFO, "peer info too long")
@@ -212,7 +199,12 @@ func (rz *RendezvousService) handleRegister(p peer.ID, m *pb.Message_Register) *
 
 	deadline := time.Now().Add(time.Duration(ttl)).Add(networkDelay)
 
-	key, err := rz.storage.Add(ns, mp, maddrs, ttl, deadline)
+	envPayload, err := marshalEnvelope(mpi)
+	if err != nil {
+		return newRegisterResponseError(pb.Message_E_INTERNAL_ERROR, err.Error())
+	}
+
+	key, err := rz.storage.Add(ns, peerRecord.ID, envPayload, ttl, deadline)
 	if err != nil {
 		return newRegisterResponseError(pb.Message_E_INTERNAL_ERROR, err.Error())
 	}
@@ -225,10 +217,6 @@ func (rz *RendezvousService) handleRegister(p peer.ID, m *pb.Message_Register) *
 	rz.cleaner.Add(deadline, key)
 
 	log.Infof("registered peer %s %s (%d)", p, ns, ttl)
-
-	for _, rzs := range rz.rzs {
-		rzs.Register(p, ns, maddrs, ttl)
-	}
 
 	return newRegisterResponse(ttl)
 }
