@@ -1,4 +1,4 @@
-module github.com/status-im/go-libp2p-rendezvous
+module github.com/status-im/go-waku-rendezvous
 
 go 1.15
 

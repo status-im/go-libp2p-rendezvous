@@ -10,7 +10,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/record"
 	record_pb "github.com/libp2p/go-libp2p-core/record/pb"
 
-	pb "github.com/status-im/go-libp2p-rendezvous/pb"
+	pb "github.com/status-im/go-waku-rendezvous/pb"
 
 	logging "github.com/ipfs/go-log/v2"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -21,7 +21,7 @@ var log = logging.Logger("rendezvous")
 
 const (
 	RendezvousID_v001 = protocol.ID("/vac/waku/rendezvous/0.0.1")
-	DefaultTTL        = 2 * 3600 // 2hr
+	DefaultTTL        = 20 // 20 seconds
 )
 
 type RendezvousError struct {
@@ -45,13 +45,13 @@ func newRegisterMessage(privKey libp2pCrypto.PrivKey, ns string, pi peer.AddrInf
 		msg.Register.Ttl = ttl64
 	}
 
-	peerInfo := &peer.PeerRecord{
+	peerRecord := &peer.PeerRecord{
 		PeerID: pi.ID,
 		Addrs:  pi.Addrs,
 		Seq:    uint64(time.Now().Unix()),
 	}
 
-	envelope, err := record.Seal(peerInfo, privKey)
+	envelope, err := record.Seal(peerRecord, privKey)
 	if err != nil {
 		return nil, err
 	}
@@ -104,12 +104,12 @@ func pbToPeerRecord(pbEnvelope *record_pb.Envelope) (peer.AddrInfo, error) {
 		return peer.AddrInfo{}, err
 	}
 
-	peerRec, ok := rec.(*peer.PeerRecord)
+	peerRecord, ok := rec.(*peer.PeerRecord)
 	if !ok {
 		return peer.AddrInfo{}, errors.New("invalid peer record")
 	}
 
-	return peer.AddrInfo{ID: peerRec.PeerID, Addrs: peerRec.Addrs}, nil
+	return peer.AddrInfo{ID: peerRecord.PeerID, Addrs: peerRecord.Addrs}, nil
 }
 
 func newRegisterResponse(ttl int) *pb.Message_RegisterResponse {
