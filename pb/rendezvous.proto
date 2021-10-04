@@ -8,9 +8,8 @@ message Message {
   enum MessageType {
     REGISTER = 0;
     REGISTER_RESPONSE = 1;
-    UNREGISTER = 2;
-    DISCOVER = 3;
-    DISCOVER_RESPONSE = 4;
+    DISCOVER = 2;
+    DISCOVER_RESPONSE = 3;
   }
 
   enum ResponseStatus {
