@@ -14,6 +14,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/host"
 	inet "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p-core/peerstore"
 )
 
 var (
@@ -187,10 +188,10 @@ func (rp *rendezvousPoint) Discover(ctx context.Context, ns string, limit int) (
 	r := ggio.NewDelimitedReader(s, inet.MessageSizeMax)
 	w := ggio.NewDelimitedWriter(s)
 
-	return discoverQuery(ns, limit, r, w)
+	return rp.discoverQuery(ns, limit, r, w)
 }
 
-func discoverQuery(ns string, limit int, r ggio.Reader, w ggio.Writer) ([]Registration, error) {
+func (rp *rendezvousPoint) discoverQuery(ns string, limit int, r ggio.Reader, w ggio.Writer) ([]Registration, error) {
 	req := newDiscoverMessage(ns, limit)
 	err := w.WriteMsg(req)
 	if err != nil {
@@ -215,12 +216,32 @@ func discoverQuery(ns string, limit int, r ggio.Reader, w ggio.Writer) ([]Regist
 	regs := res.GetDiscoverResponse().GetRegistrations()
 	result := make([]Registration, 0, len(regs))
 	for _, reg := range regs {
-		pi, err := pbToPeerRecord(reg.GetPeer())
+
+		envelope, err := pbToEnvelope(reg.GetPeer())
 		if err != nil {
 			log.Errorf("Invalid peer info: %s", err.Error())
 			continue
 		}
-		result = append(result, Registration{Peer: pi, Ns: reg.GetNs(), Ttl: int(reg.GetTtl())})
+
+		cab, ok := peerstore.GetCertifiedAddrBook(rp.host.Peerstore())
+		if !ok {
+			return nil, errors.New("a certified addr book is required")
+		}
+
+		_, err = cab.ConsumePeerRecord(envelope, time.Duration(reg.Ttl))
+		if err != nil {
+			log.Errorf("Invalid peer info: %s", err.Error())
+			continue
+		}
+
+		var record peer.PeerRecord
+		err = envelope.TypedRecord(&record)
+		if err != nil {
+			log.Errorf("Invalid peer record: %s", err.Error())
+			continue
+		}
+
+		result = append(result, Registration{Peer: peer.AddrInfo{ID: record.PeerID, Addrs: record.Addrs}, Ns: reg.GetNs(), Ttl: int(reg.GetTtl())})
 	}
 
 	return result, nil
@@ -238,11 +259,11 @@ func (rp *rendezvousPoint) DiscoverAsync(ctx context.Context, ns string) (<-chan
 	}
 
 	ch := make(chan Registration)
-	go discoverAsync(ctx, ns, s, ch)
+	go rp.discoverAsync(ctx, ns, s, ch)
 	return ch, nil
 }
 
-func discoverAsync(ctx context.Context, ns string, s inet.Stream, ch chan Registration) {
+func (rp *rendezvousPoint) discoverAsync(ctx context.Context, ns string, s inet.Stream, ch chan Registration) {
 	defer s.Reset()
 	defer close(ch)
 
@@ -257,7 +278,7 @@ func discoverAsync(ctx context.Context, ns string, s inet.Stream, ch chan Regist
 	)
 
 	for {
-		regs, err = discoverQuery(ns, batch, r, w)
+		regs, err = rp.discoverQuery(ns, batch, r, w)
 		if err != nil {
 			// TODO robust error recovery
 			//      - handle closed streams with backoff + new stream

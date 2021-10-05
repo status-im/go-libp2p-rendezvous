@@ -61,7 +61,7 @@ func newRegisterMessage(privKey libp2pCrypto.PrivKey, ns string, pi peer.AddrInf
 		return nil, err
 	}
 
-	var peerEnvelop *record_pb.Envelope
+	peerEnvelop := &record_pb.Envelope{}
 	if err = proto.Unmarshal(envPayload, peerEnvelop); err != nil {
 		return nil, err
 	}
@@ -89,6 +89,19 @@ func marshalEnvelope(pbEnvelope *record_pb.Envelope) ([]byte, error) {
 	return proto.Marshal(pbEnvelope)
 }
 
+func pbToEnvelope(pbEnvelope *record_pb.Envelope) (*record.Envelope, error) {
+	if pbEnvelope == nil {
+		return nil, errors.New("missing envelope information")
+	}
+
+	envelopeBytes, err := proto.Marshal(pbEnvelope)
+	if err != nil {
+		return nil, err
+	}
+
+	return record.UnmarshalEnvelope(envelopeBytes)
+}
+
 func pbToPeerRecord(pbEnvelope *record_pb.Envelope) (peer.AddrInfo, error) {
 	if pbEnvelope == nil {
 		return peer.AddrInfo{}, errors.New("missing envelope information")
@@ -99,7 +112,7 @@ func pbToPeerRecord(pbEnvelope *record_pb.Envelope) (peer.AddrInfo, error) {
 		return peer.AddrInfo{}, err
 	}
 
-	_, rec, err := record.ConsumeEnvelope(envelopeBytes, peer.PeerRecordEnvelopeDomain)
+	envelope, rec, err := record.ConsumeEnvelope(envelopeBytes, peer.PeerRecordEnvelopeDomain)
 	if err != nil {
 		return peer.AddrInfo{}, err
 	}
@@ -107,6 +120,10 @@ func pbToPeerRecord(pbEnvelope *record_pb.Envelope) (peer.AddrInfo, error) {
 	peerRecord, ok := rec.(*peer.PeerRecord)
 	if !ok {
 		return peer.AddrInfo{}, errors.New("invalid peer record")
+	}
+
+	if !peerRecord.PeerID.MatchesPublicKey(envelope.PublicKey) {
+		return peer.AddrInfo{}, errors.New("signing key does not match peer record")
 	}
 
 	return peer.AddrInfo{ID: peerRecord.PeerID, Addrs: peerRecord.Addrs}, nil
