@@ -157,12 +157,12 @@ func (rz *RendezvousService) handleRegister(p peer.ID, m *pb.Message_Register) *
 		return newRegisterResponseError(pb.Message_E_INVALID_NAMESPACE, "namespace too long")
 	}
 
-	mpi := m.GetPeer()
+	mpi := m.GetSignedPeerRecord()
 	if mpi == nil {
-		return newRegisterResponseError(pb.Message_E_INVALID_PEER_INFO, "missing peer info")
+		return newRegisterResponseError(pb.Message_E_INVALID_PEER_INFO, "missing signed peer record")
 	}
 
-	peerRecord, err := pbToPeerRecord(mpi)
+	peerRecord, err := unmarshalSignedPeerRecord(mpi)
 	if err != nil {
 		return newRegisterResponseError(pb.Message_E_INVALID_PEER_INFO, "invalid peer record")
 	}
@@ -199,12 +199,7 @@ func (rz *RendezvousService) handleRegister(p peer.ID, m *pb.Message_Register) *
 
 	deadline := time.Now().Add(time.Duration(ttl)).Add(networkDelay)
 
-	envPayload, err := marshalEnvelope(mpi)
-	if err != nil {
-		return newRegisterResponseError(pb.Message_E_INTERNAL_ERROR, err.Error())
-	}
-
-	key, err := rz.storage.Add(ns, peerRecord.ID, envPayload, ttl, deadline)
+	key, err := rz.storage.Add(ns, peerRecord.ID, mpi, ttl, deadline)
 	if err != nil {
 		return newRegisterResponseError(pb.Message_E_INTERNAL_ERROR, err.Error())
 	}

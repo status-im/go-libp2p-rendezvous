@@ -3,12 +3,12 @@
 ### Overview
 
 Similar to [status-im/rendezvous](https://github.com/status-im/rendezvous) 
-in using a smaller liveness TTL for records (20s), and not using `UNREGISTER 
-REQUEST`, due to assuming that the TTL is very low (making it incompatible 
+in using a smaller liveness TTL for records (20s), and not using unregistering 
+records, due to assuming that the TTL is very low (making it incompatible 
 with libp2p original rendezvous spec). This module is intended to be used 
 in go-waku as a lightweight mechanism for generalized peer discovery.
 
-Another difference compared to [libp2p/rendezvous](https://github.com/libp2p/specs/blob/master/rendezvous/README.md) and status-im/rendezvous is the usage of [routing records](https://github.com/libp2p/specs/blob/master/RFC/0003-routing-records.md) and [signed envelopes](https://github.com/libp2p/specs/blob/master/RFC/0002-signed-envelopes.md)
+A difference compared to status-im/rendezvous is the usage of [routing records](https://github.com/libp2p/specs/blob/master/RFC/0003-routing-records.md) and [signed envelopes](https://github.com/libp2p/specs/blob/master/RFC/0002-signed-envelopes.md) instead of ENR records
 
 **Protocol identifier**: `/vac/waku/rendezvous/0.0.1`
 
@@ -98,7 +98,7 @@ message Message {
 
   message Register {
     string ns = 1;
-    record.pb.Envelope peer = 2;
+    bytes signedPeerRecord = 2;
     int64 ttl = 3; // in seconds
   }
 
