@@ -90,7 +90,7 @@ func (rz *RendezvousService) Stop() {
 
 func (rz *RendezvousService) purgeOutdated() {
 	keys := rz.cleaner.PopSince(time.Now())
-	log.Info("removed records from cleaner", "deadlines", len(rz.cleaner.deadlines), "heap", len(rz.cleaner.heap), "lth", len(keys))
+	log.Debug("removed records from cleaner", "deadlines", len(rz.cleaner.deadlines), "heap", len(rz.cleaner.heap), "lth", len(keys))
 	for _, key := range keys {
 		topic := TopicPart([]byte(key))
 		log.Debug("Removing record with", "topic", string(topic))
