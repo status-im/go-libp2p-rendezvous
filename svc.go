@@ -8,9 +8,9 @@ import (
 
 	ggio "github.com/gogo/protobuf/io"
 
-	"github.com/libp2p/go-libp2p-core/host"
-	inet "github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p/core/host"
+	inet "github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 const (
