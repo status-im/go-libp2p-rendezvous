@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	pb "github.com/status-im/go-waku-rendezvous/pb"
+	pb "github.com/waku-org/go-waku-rendezvous/pb"
 
 	ggio "github.com/gogo/protobuf/io"
 

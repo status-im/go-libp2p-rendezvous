@@ -8,7 +8,7 @@ import (
 	libp2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/record"
 
-	pb "github.com/status-im/go-waku-rendezvous/pb"
+	pb "github.com/waku-org/go-waku-rendezvous/pb"
 
 	logging "github.com/ipfs/go-log/v2"
 	"github.com/libp2p/go-libp2p/core/peer"

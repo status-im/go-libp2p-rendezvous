@@ -1,4 +1,4 @@
-module github.com/status-im/go-waku-rendezvous
+module github.com/waku-org/go-waku-rendezvous
 
 go 1.17
 
